@@ -1,0 +1,51 @@
+---
+title: "STA 250 EDA"
+author: "Yudong Wang"
+date: "2/23/2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("C:/Users/wyd98/Desktop/homework/STA 250")
+library(readxl)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+# read data
+inflation <- read_excel("C:/Users/wyd98/Desktop/homework/STA 250/inflation.xlsx")
+# data preprocessing
+inflation <- inflation %>% 
+  select(-`Series ID`) %>% 
+  filter(grepl("M", Period)) %>% 
+  mutate_all(~gsub("M", "",.)) %>% 
+  mutate(month = paste(Year, Period, sep = "-")) %>% 
+  mutate(month = paste(month, "01", sep = "-"))
+inflation$Value = as.numeric(inflation$Value)
+inflation$month = as.Date(inflation$month, format = "%Y-%m-%d")
+# summaries the inflation rate
+summary(inflation$Value)
+```
+
+
+```{r}
+infla_plot <- ggplot(inflation, aes(x = month, y = Value))
+infla_plot + geom_line() + geom_point() + scale_x_date(date_breaks = '1 year', date_labels = "%Y") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + labs(title = "US inflation since 2004", x = "Year", y = "Inflation rate")
+```
+
+
+```{r}
+elec = read.csv("elec.csv", header = T)
+colnames(elec)[2] = "value"
+elec = elec %>% 
+  mutate(lag_value = lag(value)) %>% 
+  drop_na() %>% 
+  mutate(pct_change = (value/lag_value - 1)*100)
+```
+
