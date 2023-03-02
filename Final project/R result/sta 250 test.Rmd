@@ -29,18 +29,14 @@ library(MASS)
 ```{r}
 money = read.csv("M2Supply.csv")
 cpi_f = read.csv("CPI_Food_in_City.csv")
-cpi_f = cpi_f[-61,]
+cpi_f = lead(cpi_f$CPIUFDSL)
+cpi_f = na.omit(cpi_f)
 econ = money %>% 
-  mutate(cpi_f = lag(cpi_f$CPIUFDSL)) %>% 
-  dplyr::select(-DATE) %>% 
-  drop_na()
+  mutate(cpi_f = cpi_f) %>% 
+  dplyr::select(-DATE) 
 
 process <- preProcess(econ, method=c("range"))
 econ <- predict(process, econ)
-```
-
-```{r}
-log(econ+1)
 ```
 
 
@@ -51,7 +47,7 @@ summary(econ_lm)
 
 ```{r}
 price_trend = read.csv("good_trend.csv")
-price_trend = price_trend[-(1:169),]
+price_trend = price_trend[-(1:168),]
 
 process <- preProcess(price_trend, method=c("range"))
 price_trend <- predict(process, price_trend)
