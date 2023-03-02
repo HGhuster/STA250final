@@ -1,0 +1,80 @@
+---
+title: "sta 250 test"
+author: "Yudong Wang"
+date: "3/2/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require("knitr")
+opts_knit$set(root.dir = "C:/Users/wyd98/Desktop/homework/STA 250/data")
+```
+
+
+```{r}
+setwd("C:/Users/wyd98/Desktop/homework/STA 250/data")
+library(readxl)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+library(glmnet)
+library(fastDummies)
+library(caret)
+library(MASS)
+```
+
+
+```{r}
+money = read.csv("M2Supply.csv")
+cpi_f = read.csv("CPI_Food_in_City.csv")
+cpi_f = cpi_f[-61,]
+econ = money %>% 
+  mutate(cpi_f = lag(cpi_f$CPIUFDSL)) %>% 
+  dplyr::select(-DATE) %>% 
+  drop_na()
+
+process <- preProcess(econ, method=c("range"))
+econ <- predict(process, econ)
+```
+
+```{r}
+log(econ+1)
+```
+
+
+```{r}
+econ_lm = lm(cpi_f~., econ)
+summary(econ_lm)
+```
+
+```{r}
+price_trend = read.csv("good_trend.csv")
+price_trend = price_trend[-(1:169),]
+
+process <- preProcess(price_trend, method=c("range"))
+price_trend <- predict(process, price_trend)
+
+price_data = cbind(price_trend, econ)
+```
+
+```{r}
+price_lm = lm(cpi_f~., price_data)
+summary(price_lm)
+```
+
+```{r}
+full_model = lm(cpi_f~., price_data)
+step_good = stepAIC(full_model, direction = "both", trace = F)
+summary(step_good)
+
+```
+
+```{r}
+full_model = lm(log(cpi_f+1)~., price_data)
+step_good = stepAIC(full_model, direction = "both", trace = F)
+summary(step_good)
+
+```
+
