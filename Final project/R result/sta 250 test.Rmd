@@ -39,21 +39,45 @@ process <- preProcess(econ, method=c("range"))
 econ <- predict(process, econ)
 ```
 
+```{r}
+price_trend = read.csv("good_trend.csv")
+price_trend = price_trend[-(1:168),]
+price_trend = head(price_trend,60)
+
+process <- preProcess(price_trend, method=c("range"))
+price_trend <- predict(process, price_trend)
+
+price_data = cbind(price_trend, econ)
+price_data2 = price_data %>% dplyr::select(-M2SL)
+```
+
+```{r}
+bus = read.csv("Busin_and_Indus_trend.csv")
+fina = read.csv("Finance_trend.csv")
+gov = read.csv("Law_and_Gov_trend.csv")
+health = read.csv("Health_trend.csv")
+travel = read.csv("Travel_trend.csv")
+aggre_trend = bus %>% 
+  mutate(finance = fina$Finance) %>% 
+  mutate(gov = gov$Law_and_Gov) %>% 
+  mutate(health = health$Health) %>% 
+  mutate(travel = travel$Travel) %>% 
+  filter(index < "2023-01-01") %>% 
+  dplyr::select(-index)
+
+econ_new = tail(econ, -2)
+aggre_data = cbind(aggre_trend, econ_new)
+
+process <- preProcess(aggre_data, method=c("range"))
+aggre_data <- predict(process, aggre_data)
+```
 
 ```{r}
 econ_lm = lm(cpi_f~., econ)
 summary(econ_lm)
 ```
 
-```{r}
-price_trend = read.csv("good_trend.csv")
-price_trend = price_trend[-(1:168),]
 
-process <- preProcess(price_trend, method=c("range"))
-price_trend <- predict(process, price_trend)
-
-price_data = cbind(price_trend, econ)
-```
 
 ```{r}
 price_lm = lm(cpi_f~., price_data)
@@ -61,16 +85,163 @@ summary(price_lm)
 ```
 
 ```{r}
+aggre_lm = lm(cpi_f~., aggre_data)
+summary(aggre_lm)
+```
+
+```{r}
 full_model = lm(cpi_f~., price_data)
 step_good = stepAIC(full_model, direction = "both", trace = F)
 summary(step_good)
+```
 
+```{r}
+full_model = lm(cpi_f~. -M2SL, price_data)
+step_good = stepAIC(full_model, direction = "both", trace = F)
+summary(step_good)
 ```
 
 ```{r}
 full_model = lm(log(cpi_f+1)~., price_data)
 step_good = stepAIC(full_model, direction = "both", trace = F)
 summary(step_good)
+```
+
+```{r}
+full_model = lm(log(cpi_f+1)~.-M2SL, price_data)
+step_good = stepAIC(full_model, direction = "both", trace = F)
+summary(step_good)
 
 ```
 
+```{r}
+# only money supply
+acc = c()
+for (i in 1:100){
+  n = sample(nrow(econ), 0.8*nrow(econ), replace = F, prob = NULL)
+  train = econ[n, ]
+  test = econ[-n,]
+  full_model = lm(cpi_f~., train)
+  step_good = stepAIC(full_model, direction = "both", trace = F)
+  pred = predict(step_good, test)
+  temp = R2(pred, test$cpi_f)
+  acc = append(acc, temp)
+}
+mean(acc)
+```
+
+```{r}
+# all variables stepwise
+acc = c()
+for (i in 1:100){
+  n = sample(nrow(price_data), 0.8*nrow(price_data), replace = F, prob = NULL)
+  train = price_data[n, ]
+  test = price_data[-n,]
+  full_model = lm(cpi_f~., train)
+  step_good = stepAIC(full_model, direction = "both", trace = F)
+  pred = predict(step_good, test)
+  temp = R2(pred, test$cpi_f)
+  acc = append(acc, temp)
+}
+mean(acc)
+```
+
+```{r}
+# only trend variables stepwise
+acc = c()
+for (i in 1:100){
+  n = sample(nrow(price_data2), 0.8*nrow(price_data2), replace = F, prob = NULL)
+  train = price_data2[n, ]
+  test = price_data2[-n,]
+  full_model = lm(cpi_f~., train)
+  step_good = stepAIC(full_model, direction = "both", trace = F)
+  pred = predict(step_good, test)
+  temp = R2(pred, test$cpi_f)
+  acc = append(acc, temp)
+}
+mean(acc)
+```
+
+
+```{r}
+# all variables LASSO
+acc = c()
+for (i in 1:100){
+
+  n = sample(nrow(price_data), 0.8*nrow(price_data), replace = F, prob = NULL)
+  train = price_data[n, ]
+  test = price_data[-n,]
+
+  x_train = as.matrix(train %>% dplyr::select(-cpi_f))
+  y_train = train$cpi_f
+
+  x_test = as.matrix(test %>% dplyr::select(-cpi_f))
+  y_test = test$cpi_f
+
+
+  lambdas = 10^seq(2,-3, by = -0.1)
+
+  lasso = cv.glmnet(x_train, y_train, alpha = 1, lambda = lambdas, nfold = 5, standardize = T)
+  lambda_best = lasso$lambda.min
+  lasso = glmnet(x_train, y_train, alpha = 1, lambda = lambda_best, standardize = T)
+
+  pred_train = predict(lasso, s = lambda_best, newx = x_train)
+  tr_acc = 1- sum((pred_train - y_train)^2) / sum((y_train - mean(y_train))^2)
+
+  pred_test = predict(lasso, s = lambda_best, newx = x_test)
+  temp = R2(pred_test, y_test)
+  acc = append(acc, temp)
+}
+mean(acc)
+```
+
+```{r}
+# only trend variables LASSO
+acc = c()
+for (i in 1:100){
+
+  n = sample(nrow(price_data2), 0.8*nrow(price_data2), replace = F, prob = NULL)
+  train = price_data2[n, ]
+  test = price_data2[-n,]
+
+  x_train = as.matrix(train %>% dplyr::select(-cpi_f))
+  y_train = train$cpi_f
+
+  x_test = as.matrix(test %>% dplyr::select(-cpi_f))
+  y_test = test$cpi_f
+
+
+  lambdas = 10^seq(2,-3, by = -0.1)
+
+  lasso = cv.glmnet(x_train, y_train, alpha = 1, lambda = lambdas, nfold = 5, standardize = T)
+  lambda_best = lasso$lambda.min
+  lasso = glmnet(x_train, y_train, alpha = 1, lambda = lambda_best, standardize = T)
+
+  pred_train = predict(lasso, s = lambda_best, newx = x_train)
+  tr_acc = 1- sum((pred_train - y_train)^2) / sum((y_train - mean(y_train))^2)
+
+  pred_test = predict(lasso, s = lambda_best, newx = x_test)
+  temp = R2(pred_test, y_test)
+  acc = append(acc, temp)
+}
+mean(acc)
+```
+
+```{r}
+library(caret)
+```
+
+
+```{r}
+# all variables 10-fold CV
+tr_control = trainControl(method = "cv", number = 10)
+model = train(cpi_f~., data = price_data, method = "lm", trControl = tr_control)
+print(model)
+```
+
+```{r}
+# only trend variables 10-fold CV
+tr_control = trainControl(method = "cv", number = 10)
+model = train(cpi_f~., data = price_data2, method = "lm", trControl = tr_control)
+print(model)
+```
