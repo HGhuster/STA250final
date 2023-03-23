@@ -1,0 +1,159 @@
+---
+title: "STA250 final_Nigeria"
+author: "Yudong Wang"
+date: "3/8/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require("knitr")
+opts_knit$set(root.dir = "C:/Users/wyd98/Desktop/homework/STA 250/data/Nigeria")
+```
+
+
+```{r}
+setwd("C:/Users/wyd98/Desktop/homework/STA 250/data/Nigeria")
+library(readxl)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+library(glmnet)
+library(fastDummies)
+library(caret)
+library(MASS)
+library(stargazer)
+```
+
+
+```{r}
+money_ni = read.csv("M2.csv")
+cpi_f_ni = read.csv("inflation.csv")
+cpi_f_ni = lead(cpi_f_ni$All.Items..Year.on.Change.)
+cpi_f_ni = na.omit(cpi_f_ni)
+econ_ni = money_ni %>% 
+  mutate(cpi_f = cpi_f_ni) %>% 
+  dplyr::select(-Year, -Month) 
+
+process <- preProcess(econ_ni, method=c("range"))
+econ_ni <- predict(process, econ_ni)
+```
+
+```{r}
+Motor_ni = read.csv("Motor.csv")
+Car_ni = read.csv("car.csv")
+Cola_ni = read.csv("cola.csv")
+Electric_ni = read.csv("electricity.csv")
+Price_ni = read.csv("price.csv")
+Infla_ni = read.csv("inflation_trend.csv")
+
+
+price_trend_ni = Motor_ni %>% 
+  mutate(motor = Motor_ni$motor) %>% 
+  mutate(car = Car_ni$car) %>% 
+  mutate(cola = Cola_ni$cola) %>% 
+  mutate(electric = Electric_ni$electric) %>% 
+  mutate(price = Price_ni$price) %>% 
+  mutate(infla = Infla_ni$infla) %>% 
+  dplyr::select(-index)
+  
+price_trend_ni = head(price_trend_ni,60)
+
+process <- preProcess(price_trend_ni, method=c("range"))
+price_trend_ni <- predict(process, price_trend_ni)
+
+price_data_ni = cbind(price_trend_ni, econ_ni)
+price_data2_ni = price_data_ni %>% dplyr::select(-M2SL)
+```
+
+```{r}
+write.csv(price_data_ni, "C:/Users/wyd98/Desktop/homework/STA 250/data/price_data_nigeria.csv", row.names=FALSE)
+```
+
+```{r}
+econ_ni_lm = lm(cpi_f~., econ_ni)
+summary(econ_lm)
+```
+
+```{r}
+plot(econ$M2SL)
+lines(econ$cpi_f)
+```
+
+
+```{r}
+price_ni_lm = lm(cpi_f~., price_data_ni)
+summary(price_lm)
+```
+
+```{r}
+price2_ni_lm = lm(cpi_f~., price_data2_ni)
+summary(price2_lm)
+```
+
+```{r}
+stargazer(econ_lm, price_lm, price2_lm, type = "html", out = "ni.html")
+```
+
+
+```{r}
+full_model = lm(cpi_f~., price_data_ni)
+step_good = stepAIC(full_model, direction = "both", trace = F)
+summary(step_good)
+```
+
+```{r}
+full_model = lm(cpi_f~., price_data2_ni)
+step_good = stepAIC(full_model, direction = "both", trace = F)
+summary(step_good)
+```
+
+```{r}
+library(caret)
+```
+
+```{r}
+n = sample(nrow(econ_ni), 0.8*nrow(econ_ni), replace = F, prob = NULL)
+train_ni = price_data_ni[n, ]
+test_ni = price_data_ni[-n,]
+  
+train_ni2 = price_data2_ni[n, ]
+test_ni2 = price_data2_ni[-n,]
+
+train_ni_e = econ_ni[n,]
+test_ni_e = econ_ni[-n,]
+```
+
+```{r}
+# only trend variables 10-fold CV
+tr_control = trainControl(method = "cv", number = 10)
+model_ni_f = train(cpi_f~., data = train_ni, method = "lm", trControl = tr_control)
+print(model_ni_f)
+
+pred_ni_f = predict(model_ni_f, test_ni)
+R2(pred_ni_f, test_ni$cpi_f)
+```
+
+```{r}
+# only trend variables 10-fold CV
+tr_control = trainControl(method = "cv", number = 10)
+model_ni = train(cpi_f~., data = train_ni2, method = "lm", trControl = tr_control)
+print(model_ni)
+
+pred_ni = predict(model_ni, test_ni2)
+R2(pred_ni, test_ni2$cpi_f)
+```
+
+```{r}
+pred_ni_e = predict(econ_ni_lm, test_ni_e)
+  
+colors = c("Baseline" = "tomato", "M2+Google" = "yellowgreen", "Google only" = "greenyellow", "real CPI" = "black")
+
+ni_pic = ggplot(test_ni, aes(x = c(1:12)))
+ni_pic + geom_point(aes(y = cpi_f, col = "real CPI")) +
+  geom_line(aes(y = pred_ni_e, col = "Baseline")) +
+  geom_line(aes(y = pred_ni, col = "Google only")) +
+  geom_line(aes(y = pred_ni_f, col = "M2+Google")) +
+  labs(x = "X_i", y = "CPI") + xlim(0,13)
+```

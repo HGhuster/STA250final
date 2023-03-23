@@ -23,6 +23,8 @@ library(glmnet)
 library(fastDummies)
 library(caret)
 library(MASS)
+library(Metrics)
+library(stargazer)
 ```
 
 
@@ -50,6 +52,11 @@ price_trend <- predict(process, price_trend)
 price_data = cbind(price_trend, econ)
 price_data2 = price_data %>% dplyr::select(-M2SL)
 ```
+
+```{r}
+write.csv(price_data, "C:/Users/wyd98/Desktop/homework/STA 250/data/price_data.csv", row.names=FALSE)
+```
+
 
 ```{r}
 bus = read.csv("Busin_and_Indus_trend.csv")
@@ -85,6 +92,14 @@ summary(price_lm)
 ```
 
 ```{r}
+price2_lm = lm(cpi_f~., price_data2)
+summary(price2_lm)
+stargazer(econ_lm, price_lm, price2_lm,
+          econ_ni_lm, price_ni_lm, price2_ni_lm, 
+          type = "html", out = "us1.html")
+```
+
+```{r}
 aggre_lm = lm(cpi_f~., aggre_data)
 summary(aggre_lm)
 ```
@@ -96,7 +111,7 @@ summary(step_good)
 ```
 
 ```{r}
-full_model = lm(cpi_f~. -M2SL, price_data)
+full_model = lm(cpi_f~., price_data2)
 step_good = stepAIC(full_model, direction = "both", trace = F)
 summary(step_good)
 ```
@@ -108,7 +123,7 @@ summary(step_good)
 ```
 
 ```{r}
-full_model = lm(log(cpi_f+1)~.-M2SL, price_data)
+full_model = lm(log(cpi_f+1)~., price_data2)
 step_good = stepAIC(full_model, direction = "both", trace = F)
 summary(step_good)
 
@@ -239,9 +254,77 @@ model = train(cpi_f~., data = price_data, method = "lm", trControl = tr_control)
 print(model)
 ```
 
+
 ```{r}
 # only trend variables 10-fold CV
 tr_control = trainControl(method = "cv", number = 10)
 model = train(cpi_f~., data = price_data2, method = "lm", trControl = tr_control)
 print(model)
 ```
+
+```{r}
+n = sample(nrow(econ), 0.8*nrow(econ), replace = F, prob = NULL)
+train = price_data[n, ]
+test = price_data[-n,]
+  
+train2 = price_data2[n, ]
+test2 = price_data2[-n,]
+
+train_e = econ[n,]
+test_e = econ[-n,]
+```
+
+```{r}
+# only money supply 10-fold CV
+tr_control = trainControl(method = "cv", number = 10)
+model = train(cpi_f~., data = train_e, method = "lm", trControl = tr_control)
+print(model)
+
+pred = predict(model, test_e)
+R2(pred, test_e$cpi_f)
+```
+
+```{r}
+# Money + trend variables 10-fold CV
+tr_control = trainControl(method = "cv", number = 10)
+model_f = train(cpi_f~., data = train, method = "lm", trControl = tr_control)
+print(model_f)
+
+pred_f = predict(model_f, test)
+R2(pred_f, test$cpi_f)
+```
+
+```{r}
+# only trend variables 10-fold CV
+tr_control = trainControl(method = "cv", number = 10)
+model = train(cpi_f~., data = train2, method = "lm", trControl = tr_control)
+print(model)
+
+pred = predict(model, test2)
+R2(pred, test2$cpi_f)
+```
+
+```{r}
+plot(test$cpi_f)
+lines(pred_f, col = "2")
+lines(pred, col = "4")
+```
+
+
+```{r}
+pred_e = predict(econ_lm, test_e)
+  
+colors = c("Baseline" = "tomato", "M2+Google" = "yellowgreen", "Google only" = "greenyellow", "real CPI" = "black")
+
+us_pic = ggplot(test, aes(x = c(1:12)))
+us_pic + geom_point(aes(y = cpi_f, col = "real CPI")) +
+  geom_line(aes(y = pred_e, col = "Baseline")) +
+  geom_line(aes(y = pred, col = "Google only")) +
+  geom_line(aes(y = pred_f, col = "M2+Google")) +
+  labs(x = "X_i", y = "CPI") + xlim(0,13)
+```
+
+
+
+
+
